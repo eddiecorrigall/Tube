@@ -1,6 +1,15 @@
 # Tube-n-tastic!
 
-Browser based home entertainment center running on HTTP
+Browser based home entertainment center (HEC) running on HTTP.
+
+**Future Plans**
+* Find out how to support more video and audio file formats!
+* Connect via HTTP to HEC using mobile phone to act as a remote, Examples:
+	* Adjust volume / pause, even when you are not in the same room
+	* Append to playlist
+* File search: when you press enter in the search textbox, add all highlighted to playlist
+
+## TECHNOLOGIES
 
 **NodeJS**
 
