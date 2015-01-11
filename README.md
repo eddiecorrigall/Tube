@@ -1,8 +1,8 @@
 # Tube-n-tastic!
 
-![Tube thumbnail](thumbnail.png)
-
 Browser based home entertainment center (HEC) running on HTTP.
+
+![Tube thumbnail](thumbnail.png)
 
 **Future Plans**
 * Find out how to support more video and audio file formats!
