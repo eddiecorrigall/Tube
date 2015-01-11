@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<!-- TODO:
+ - When you file search, and hit <enter>, add highlighted to playlist!
+-->
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>(TNT) Tube-n-tastic - Web based media center</title>
+
+		<!-- ##### Google Fonts ##### -->
+		<link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Lobster" />
+
+		<!-- ##### jQuery ##### -->
+		<link type="text/css" rel="stylesheet" href="jquery/ui/jquery-ui.min.css">
+		<script type="text/javascript" src="jquery/jquery.min.js"></script>
+		<script type="text/javascript" src="jquery/ui/jquery-ui.min.js"></script>
+
+		<!-- ##### Video-JS ##### -->
+		<link type="text/css" rel="stylesheet" href="video-js/video-js.css" />
+		<script type="text/javascript" src="video-js/video.js"></script>
+		
+		<!-- ##### jsTree ##### -->
+		<link type="text/css" rel="stylesheet" href="jstree/themes/default/style.min.css" />
+		<script type="text/javascript" src="jstree/jstree.min.js"></script>
+
+		<!-- ##### TUBE ##### -->
+
+		<style type="text/css">
+			body {
+				font-size: 12px;
+				/* TODO: Match jQuery UI font-family */;
+				margin: 0;
+				padding: 1em;
+			}
+			h1 {
+				text-align: center;
+				margin-top: 0;
+				margin-bottom: 0;
+				padding: 0;
+				font-size: 60px;
+				font-family: "Lobster", Helvetica, Arial;
+				color: #666;
+			}
+			h1:after {
+				color: #d6d6d6;
+				text-shadow: 0 1px 0 white;
+			}
+			hr {
+				margin: 3em auto;
+				border: none;
+				border-top: 1em dotted #404040;
+				text-align: center;
+			}
+			input {
+				padding: 1em;
+			}
+			.section {
+				margin: 0;
+				margin-left: auto;
+				margin-right: auto;
+				margin-bottom: 3em;
+			}
+			#page {
+				width: 784px;
+				margin-left: auto;
+				margin-right: auto;
+			}
+			#player_section {
+				width: 720px;
+				border: 32px solid #404040;
+				border-radius: 32px;
+				text-align: center;
+			}
+			#file_search_section {
+				text-align: center;
+			}
+		</style>
+
+		<script type="text/javascript">
+
+			var VIDEO_MIME_LIST = [ "video/mp4", "video/webm", "video/ogg", "video/ogv" ];
+			var AUDIO_MIMI_LIST = [];
+
+			var videoPlayerId		= "video_player";
+			var fileBrowserId		= "file_browser";
+			var fileSearchId		= "file_search";
+			var fileSearchClearId	= "file_search_clear";
+			var fileRefreshId		= "file_refresh";
+
+			var videoAPI = null;
+
+			(function($) {
+				
+				$.isString = function(object) {
+					return (jQuery.type(object) === "string");
+				};
+
+				$.blinkDialog = function(settings, icon_classes) {
+
+					var defaults = {
+						// jQuery.dialog
+						"title": "Blink Dialog",
+						"hide": {
+							"effect": "explode",
+							"duration": "fast"
+						},
+
+						// Custom
+						"text": [ "Hello world", "Hello world" ],
+						"text_align": "center",
+						"duration": "slow"
+					};
+
+					sessings = settings || {};
+					settings = $.extend(defaults, settings);
+					settings.text = $.isString(settings.text)
+						? [ settings.text ]
+						: settings.text;
+					settings.duration = $.isNumeric(settings.duration)
+						? parseInt(settings.duration)
+						: settings.duration == "slow" ? 5000 : 1000;
+
+					icon_classes = icon_classes || []; // Examples: [ "ui-icon", "ui-icon-alert" ]
+
+					var dialogElement = $("<div />");
+					dialogElement.addClass("dialog");
+					dialogElement.addClass("ui-state-error");
+
+					dialogElement.dialog({
+						"title": settings.title,
+						"hide": settings.hide,
+						"resizable": false,
+						"open": function(e, ui) {
+
+							var openedElement = $(this);
+
+							$(".dialog").not(openedElement).remove(); // Clean up
+
+							var icon = $("<span />");
+
+							var icon_margin = 4; // Spacing between icon and text
+							var icon_offset = function(margin) { return icon.width()+margin; } // Must be function else width() will be wrong
+
+							icon.addClass(icon_classes.join(' '));
+							icon.css({
+								"margin-left": 0-icon_offset(icon_margin),
+								"margin-right": icon_margin,
+								"display": "inline-block",
+								"vertical-align": "text-bottom" // "middle"
+							});
+
+							$.each(settings.text, function(index, text) {
+								
+								var p = $("<p />");
+								p.text(text);
+								
+								if (index == 0) {
+									p.prepend(icon);
+								}
+
+								p.css({
+									"margin": (settings.text_align == "center" ? icon_offset(0) : icon_offset(icon_margin)),
+									"text-align": settings.text_align
+								});
+
+								openedElement.append(p);
+							});
+
+							console.log(settings.duration);
+
+							window.setTimeout(function() {
+								openedElement.dialog("close");
+								openedElement.remove();
+							}, settings.duration);
+						}
+					});
+				};
+			})(jQuery);
+
+			$(document).ready(function() {
+
+				// ##### Video-js ##### //
+
+				var videoPlayer = $(document.getElementById(videoPlayerId));
+				videoPlayer.addClass("video-js");
+				videoPlayer.addClass("vjs-default-skin");
+
+				videojs.options.flash.swf = "video-js/video-js.swf";
+				videojs(videoPlayerId, {
+					"height": 480,
+					"width": 720,
+					"controls": true,
+					"autoplay": false,
+					"preload": "auto",
+					"poster": "signal-loss.png"
+				});
+
+				videoAPI = _V_(videoPlayerId);
+
+				// ##### jsTree ##### //
+
+				var fileBrowser		= $(document.getElementById(fileBrowserId));
+				var fileSearch		= $(document.getElementById(fileSearchId));
+				var fileSearchClear	= $(document.getElementById(fileSearchClearId));
+				var fileRefresh		= $(document.getElementById(fileRefreshId));
+
+				fileSearch.width(640);
+
+				fileSearch.keyup(function(e) {
+					var text = fileSearch.val();
+					fileBrowser.jstree(true).search(text);
+				});
+
+				fileSearchClear.button({ "text": false, "icons": { "primary": "ui-icon-close" }});
+				fileSearchClear.click(function(e) {
+					fileSearch.val("");
+				});
+
+				fileRefresh.button({ "text": false, "icons": { "primary": "ui-icon-refresh" }});
+				fileRefresh.click(function(e) {
+					fileBrowser.jstree("refresh");
+				});
+
+				fileBrowser.jstree({
+					"plugins": [
+						//"checkbox", // used for select items
+						"search", // highlight matches or make visible
+						"sort" // sorted based on comparison config option
+					],
+					"core": {
+						"data" : {
+							"url": "/list",
+							"data": function(node) {
+								return {
+									"id": (node.id == "#") ? "root" : node.id
+								};
+							}
+						}
+					}
+				});
+
+				fileBrowser.on("loaded.jstree", function() {
+					fileBrowser.jstree("open_all");
+				});
+
+				fileBrowser.on("select_node.jstree", function(e, data) {
+
+					var videoList = [];
+					var audioList = [];
+
+					for (var index = 0; index < data.selected.length; index++) {
+						
+						var node = data.instance.get_node(data.selected[index]).original;
+
+						if (("file" in node) == false) continue;
+						
+						if (VIDEO_MIME_LIST.indexOf(node.mime) >= 0) {
+							
+							videoList.push({
+								"type": node.mime,
+								"src": node.file
+							});
+
+							continue;
+						}
+
+						if (AUDIO_MIMI_LIST.indexOf(node.mime) >= 0) {
+							// TODO: ...
+							continue;
+						}
+
+						$.blinkDialog(
+							{
+								"title": "Failed to Load Media",
+								"text": [ "File format not suppported", node.mime ],
+								"text_align": "left",
+								"duration": "fast"
+							},
+							[ "ui-icon", "ui-icon-alert" ]
+						);
+					}
+
+					if (videoList.length > 0) {
+						videoAPI.src(videoList);
+						videoAPI.play();
+						return;
+					}
+
+					if (audioList.length > 0) {
+						// TODO...
+						return;
+					}
+				});
+			});
+		</script>
+	</head>
+	<body>
+		<div id="page">
+			<h1>Tube-n-tastic!</h1>
+			<div id="dialog"></div>
+			<div class="section" id="player_section">
+				<video id="video_player">Sorry, your browser does not support HTML5</video>
+			</div>
+			<div class="section" id="file_search_section">
+				<input id="file_search" type="text" placeholder="Search by file name..." />
+				<button id="file_search_clear" type="button">Clear Search</button>
+			</div>
+			<hr />
+			<div class="section" id="file_browser_section">
+				<button id="file_refresh" type="button">Refresh Files</button>
+				<div id="file_browser"></div>
+			</div>
+		</div>
+	</body>
+</HTML>
