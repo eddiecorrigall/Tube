@@ -1,5 +1,7 @@
 # Tube-n-tastic!
 
+![Tube thumbnail](thumbnail.png)
+
 Browser based home entertainment center (HEC) running on HTTP.
 
 **Future Plans**
