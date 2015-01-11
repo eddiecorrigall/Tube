@@ -1,5 +1,14 @@
 # Tube-n-tastic!
-Browser basted home entertainment centre running on HTTP
+
+Browser based home entertainment center running on HTTP
+
+**NodeJS**
+
+	Express, ShortId, Mime
+
+**JavaScript**
+
+	jQuery, jQuery UI, video.js, jstree
 
 ## MIME SUPPORT
 
@@ -7,23 +16,25 @@ Browser basted home entertainment centre running on HTTP
 
 ## INSTALL
 
-__NodeJS__
+**NodeJS**
 
 sudo apt-get update
 sudo apt-get install build-essential
 sudo apt-get install nodejs
 sudo apt-get install npm
 
-__NodeJS Plugins__
+**NodeJS Plugins**
 
 npm install shortid
 npm install mime
 npm install express
 
 ## RUN
-__Note:__ port is optional and defaults to 8080
-nodejs tube.js <port>
+
+**Note:** port is optional and defaults to 8080
+
+*nodejs tube.js port*
 
 ## LOAD
 
-Store your videos in ./www/videos
+Store your videos in *./www/videos*
