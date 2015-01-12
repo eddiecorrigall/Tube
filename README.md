@@ -5,7 +5,6 @@ Browser based home entertainment center (HEC) running on HTTP.
 ![Tube thumbnail](thumbnail.png)
 
 **Future Plans**
-* Add a file/folder table system for SQL in RAM only
 * File search: when you press enter in the search textbox, add all highlighted to playlist
 * Find out how to support more video and audio file formats!
 * Connect via HTTP to HEC using mobile phone to act as a remote, Examples:
