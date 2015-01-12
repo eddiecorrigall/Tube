@@ -16,7 +16,7 @@ Browser based home entertainment center (HEC) running on HTTP.
 
 **NodeJS**
 
-	Express, ShortId, Mime
+	Express, Mime
 
 **JavaScript**
 
@@ -26,7 +26,7 @@ Browser based home entertainment center (HEC) running on HTTP.
 
 	"video/mp4", "video/webm", "video/ogg", "video/ogv"
 
-## INSTALL
+## INSTALL LINUX
 
 **NodeJS**
 
@@ -35,14 +35,15 @@ Browser based home entertainment center (HEC) running on HTTP.
 > sudo apt-get install build-essential
 > sudo apt-get install nodejs
 > sudo apt-get install npm
+> sudo ln -s /usr/bin/nodejs /usr/bin/node
 ```
 
 **NodeJS Plugins**
 
 ```
 > npm install shortid
-> npm install mime
 > npm install express
+> npm install dblite
 ```
 
 ## RUN
