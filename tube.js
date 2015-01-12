@@ -4,161 +4,259 @@ var http = require("http");
 var path = require("path");
 
 // Additional plugins
-var shortId = require("shortid");
 var express = require("express");
 var mime = require("mime");
+var dblite = require("dblite");
 
 var www = path.join(__dirname, "/www");
 
-var root = path.join(www, "/videos"); // Must be accessable via http, ie. a child of www
-var root_id = null;
+var root_id = 1; // Assumption
+var root_path = path.join(www, "/videos"); // Must be accessable via http, ie. a child of www
 
-var path_id_table = {}; // path id => path string
-var path_string_table = {}; // path string => path id
+// ##### ##### ##### ##### ##### 
+// ##### DATABASE
+// ##### ##### ##### ##### ##### 
 
-var generatePathId = function(path_string) { // Return a unique path id given a path string
+var db = dblite(":memory:"); // In-memory database
 
-	var path_id = getPathId(path_string);
+db.on("info", function (data) { console.log(data); });
+db.on('error', function (error) { console.error(error.toString()); });
 
-	if (path_id == null) {
-		// Create path entry
-		path_id = shortId.generate();
-		path_id_table[path_id] = path_string;
-		path_string_table[path_string] = path_id;
-	}
+db.query("BEGIN TRANSACTION");
+db.query(
+	"CREATE TABLE IF NOT EXISTS files ("	+
+		"file_path	TEXT NOT NULL,"			+
+		"UNIQUE(file_path)"					+
+	")"
+);
+db.query("COMMIT");
 
-	return path_id;
+// ##### DATABASE FUNCTIONS
+
+var getFileId = function(file_path, callback) {
+
+	console.log("getFileId - file_path - %s", file_path);
+
+	db.query(
+		"SELECT ROWID FROM files WHERE file_path = ?",
+		[ file_path ],
+		{
+			ROWID: Number
+		},
+		function(error, rows) {
+
+			console.log("getFileId - rows - %s", JSON.stringify(rows));
+
+			if (error) return;
+
+			switch (rows.length) {
+				case 0: return;
+				case 1: callback(rows[0].ROWID); return;
+			}
+
+			throw new Error("Database duplicates - %s", JSON.stringify(rows));
+		}
+	);
 };
 
-var getPathId = function(path_string) { // Return path id on success otherwise false
+var getFilePath = function(file_id, callback) {
 
-	if (path_string in path_string_table) {
-		return path_string_table[path_string];
-	}
+	console.log("getFilePath - file_id - %d", file_id);
 
-	return null;
+	db.query(
+		"SELECT file_path FROM files WHERE ROWID = ?",
+		[ file_id ],
+		{
+			file_path: String
+		},
+		function(error, rows) {
+
+			console.log("getFilePath - rows - %s", JSON.stringify(rows));
+
+			if (error) return;
+
+			switch (rows.length) {
+				case 0: return;
+				case 1: callback(rows[0].file_path); return;
+			}
+
+			throw new Error("Database duplicates - %s", JSON.stringify(rows));
+		}
+	);
 };
 
-var getPath = function(path_id) { // Return path string on success otherwise false
+var acquireFile = function(file_path, callback) {
+
+	console.log("acquireFile - file_path - %s", file_path);
+
+	db.query(
+		"INSERT OR IGNORE INTO files (file_path) VALUES (?)",
+		[ file_path ],
+		function(error) {
+			if (error) return;
+			getFileId(file_path, callback);
+		}
+	);
+};
+
+// #####
+
+acquireFile(root_path, function(file_id) {
+	console.log("Root Id - " + file_id);
+	if (root_id != file_id) {
+		throw new Error("Database is not empty!");
+	}
+});
+
+// ##### ##### ##### ##### ##### 
+// ##### JSON API
+// ##### ##### ##### ##### ##### 
+
+var jsonDirectory = function(parent_path, child_path, callback) { // Return jstree format
+
+	console.log("jsonDirectory - parent_path - %s", parent_path);
+	console.log("jsonDirectory - child_path - %s", child_path);
+
+	getFileId(parent_path, function(parent_id) {
+
+		console.log("jsonDirectory - parent_id - %s", parent_id);
+
+		acquireFile(child_path, function(child_id) {
+
+			console.log("jsonDirectory - child_id - %d", child_id);
+			
+			var jstree = {
+				"parent": parent_id,
+				"id": child_id,
+				"children": true,
+				"icon": "jstree-folder",
+				"state": "closed",
+				"text": path.basename(child_path)
+			};
+
+			if (parent_id == root_id) {
+				jstree.parent = '#';
+				jstree.icon = "/tree.png";
+			}
+
+			callback(jstree);
+		});
+	});
+};
+
+var jsonFile = function(parent_path, child_path, callback) { // Return jstree format
+
+	console.log("jsonFile - parent_path - %s", parent_path);
+	console.log("jsonFile - child_path - %s", child_path);
 	
-	if (path_id in path_id_table) {
-		return path_id_table[path_id];
-	}
+	getFileId(parent_path, function(parent_id) {
 
-	return null; // No such path id
+		console.log("jsonFile - parent_id - %d", parent_id);
+
+		acquireFile(child_path, function(child_id) {
+
+			console.log("jsonFile - child_id - %d", child_id);
+
+			var jstree = {
+				"parent": parent_id,
+				"id": child_id,
+				"children": false,
+				"icon": "jstree-file",
+				"state": "disabled",
+				"text": path.basename(child_path),
+				// Custom
+				"mime": mime.lookup(child_path),
+				"file": child_path.substr(www.length) // TODO: this could be done better
+			};
+
+			if (parent_id == root_id) {
+				jstree.parent = '#';
+			}
+
+			callback(jstree);
+		});
+	});
 };
-
-var jsonDirectory = function(parent_path, directory_path) { // Return jstree format
-
-	var parent_id = getPathId(parent_path);
-
-	if (parent_id == null) {
-		return null;
-	}
-
-	var jstree = {
-		"parent": parent_id,
-		"id": generatePathId(directory_path),
-		"children": true,
-		"icon": "jstree-folder",
-		"state": "closed",
-		"text": path.basename(directory_path)
-	};
-
-	if (jstree.parent == root_id) {
-		jstree.parent = '#';
-		jstree.icon = "/tree.png";
-	}
-
-	return jstree;
-};
-
-var jsonFile = function(parent_path, file_path) { // Return jstree format
-	
-	var parent_id = getPathId(parent_path);
-
-	if (parent_id == null) {
-		return null;
-	}
-
-	var jstree = {
-		"parent": parent_id,
-		"id": generatePathId(file_path),
-		"children": false,
-		"icon": "jstree-file",
-		"state": "disabled",
-		"text": path.basename(file_path),
-		// Custom
-		"mime": mime.lookup(file_path),
-		"file": file_path.substr(www.length) // TODO: this could be done better
-	};
-
-	if (jstree.parent == root_id) {
-		jstree.parent = '#';
-	}
-
-	return jstree;
-};
-
-root_id = generatePathId(root);
 
 // ##### ##### ##### ##### ##### //
 
-var listCallback = function(request, response) {
+var list_httpCallback = function(request, response) {
 
-	var query = url.parse(request.url, true).query;
+	try {
 
-	var list = [];
+		response.writeHead(200, { "Content-Type": "application/json" });
 
-	if ("id" in query) {
+		// Used to accumulate list in async
+		var remaining = 0;
+		var list = [];
+		var listAccumulator = function(item) {
 
-		var parent_id = (query.id == "root") ? root_id : query.id;
-		var parent_path = getPath(parent_id);
+			remaining--;
 
-		if (parent_path) {
-			
-			console.log("parent id: " + parent_id);
-			console.log("parent path: " + parent_path);
+			if (item) {
+				list.push(item);
+			}
 
-			try {
+			if (remaining <= 0) {
+				response.end(JSON.stringify(list));
+			}
+		};
 
-				var entries = fs.readdirSync(parent_path);
+		var query = url.parse(request.url, true).query;
 
-				entries.forEach(function(entry) {
+		console.log("Http Query - " + JSON.stringify(query));
 
-					var absolute_path = path.resolve(parent_path, entry);
+		if ("id" in query) {
 
-					if (absolute_path.indexOf(root) == 0) { // Prevent escape from root
+			var parent_id = (query.id == "root") ? root_id : query.id;
 
-						var stats = fs.statSync(absolute_path);
-						var json = null;
+			console.log("Parent Id - " + parent_id);
 
-						if (stats.isDirectory()) {
-							json = jsonDirectory(parent_path, absolute_path);
-						}
-						else {
-							json = jsonFile(parent_path, absolute_path);
-						}
+			getFilePath(parent_id, function(parent_path) {
 
-						if (json != null) {
-							list.push(json);
-						}
+				console.log("Parent Path - " + parent_path);
+
+				var parent_stats = fs.statSync(parent_path); // Move this into database
+
+				if (parent_stats.isDirectory(parent_path) == false) {
+					console.log("Parent is not a directory");
+					response.end(JSON.stringify(null));
+					return;
+				}
+
+				var children = fs.readdirSync(parent_path);
+
+				remaining = children.length;
+
+				children.forEach(function(child_path) {
+
+					// Prevent escape from root
+
+					child_path = path.resolve(parent_path, child_path);
+					if (child_path.indexOf(root_path) != 0) return;
+
+					// Choose the appropriate format
+
+					var stats = fs.statSync(child_path);
+					
+					if (stats.isDirectory()) {
+						jsonDirectory(parent_path, child_path, listAccumulator);
+					}
+					else {
+						jsonFile(parent_path, child_path, listAccumulator);
 					}
 				});
-			}
-			catch (exception) {
-				console.log(exception)
-			}
+			});
 		}
 	}
-
-	response.writeHead(200, { "Content-Type": "application/json" });
-	response.end(JSON.stringify(list));
+	catch (exception) {
+		console.log(exception)
+	}
 };
 
-// ##### ##### ##### ##### ##### //
-// ##### RUN PROGRAM
-// ##### ##### ##### ##### ##### //
+// ##### ##### ##### ##### ##### 
+// ##### RUN HTTP SERVER
+// ##### ##### ##### ##### ##### 
 
 var port = parseInt(process.argv[2]) || 8080;
 
@@ -170,7 +268,7 @@ if (port < 0) {
 var app = express();
 var httpServer = http.createServer(app);
 
-app.get("/list", listCallback);
+app.get("/list", list_httpCallback);
 app.use(express.static(www));
 
 httpServer.listen(port, function () {
