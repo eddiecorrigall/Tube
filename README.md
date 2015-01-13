@@ -51,7 +51,7 @@ Browser based home entertainment center (HEC) running on HTTP.
 > nodejs tube.js <port>
 ```
 
-**Note:** *<port>* is optional and defaults to 8080
+**Note:** *port* is optional and defaults to 8080
 
 ## LOAD
 
