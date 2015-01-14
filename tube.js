@@ -3,6 +3,9 @@ var url = require("url");
 var http = require("http");
 var path = require("path");
 
+// TODO
+// * Cache mime, size and type into database
+
 // Additional plugins
 var express = require("express");
 var mime = require("mime");
@@ -10,6 +13,7 @@ var dblite = require("dblite");
 
 var www = path.join(__dirname, "/www");
 
+var root_alias = "root";
 var root_id = 1; // Assumption
 var root_path = path.join(www, "/videos"); // Must be accessable via http, ie. a child of www
 
@@ -19,7 +23,7 @@ var root_path = path.join(www, "/videos"); // Must be accessable via http, ie. a
 
 var db = dblite(":memory:"); // In-memory database
 
-db.on("info", function (data) { console.log(data); });
+db.on("info", function (info) { console.log(info); });
 db.on('error', function (error) { console.error(error.toString()); });
 
 db.query("BEGIN TRANSACTION");
@@ -38,20 +42,23 @@ var getFileId = function(file_path, callback) {
 	console.log("getFileId - file_path - %s", file_path);
 
 	db.query(
-		"SELECT ROWID FROM files WHERE file_path = ?",
+		"SELECT ROWID as file_id FROM files WHERE file_path = ?",
 		[ file_path ],
 		{
-			ROWID: Number
+			file_id: Number
 		},
 		function(error, rows) {
 
 			console.log("getFileId - rows - %s", JSON.stringify(rows));
 
-			if (error) return;
+			if (error) {
+				callback(null);
+				return;
+			}
 
 			switch (rows.length) {
-				case 0: return;
-				case 1: callback(rows[0].ROWID); return;
+				case 0: callback(null); return;
+				case 1: callback(rows[0].file_id); return;
 			}
 
 			throw new Error("Database duplicates - %s", JSON.stringify(rows));
@@ -73,10 +80,13 @@ var getFilePath = function(file_id, callback) {
 
 			console.log("getFilePath - rows - %s", JSON.stringify(rows));
 
-			if (error) return;
+			if (error) {
+				callback(null);
+				return;
+			}
 
 			switch (rows.length) {
-				case 0: return;
+				case 0: callback(null); return;
 				case 1: callback(rows[0].file_path); return;
 			}
 
@@ -93,7 +103,10 @@ var acquireFile = function(file_path, callback) {
 		"INSERT OR IGNORE INTO files (file_path) VALUES (?)",
 		[ file_path ],
 		function(error) {
-			if (error) return;
+			if (error) {
+				callback(null);
+				return;
+			}
 			getFileId(file_path, callback);
 		}
 	);
@@ -112,107 +125,27 @@ acquireFile(root_path, function(file_id) {
 // ##### JSON API
 // ##### ##### ##### ##### ##### 
 
-var jsonDirectory = function(parent_path, child_path, callback) { // Return jstree format
-
-	console.log("jsonDirectory - parent_path - %s", parent_path);
-	console.log("jsonDirectory - child_path - %s", child_path);
-
-	getFileId(parent_path, function(parent_id) {
-
-		console.log("jsonDirectory - parent_id - %s", parent_id);
-
-		acquireFile(child_path, function(child_id) {
-
-			console.log("jsonDirectory - child_id - %d", child_id);
-			
-			var jstree = {
-				"parent": parent_id,
-				"id": child_id,
-				"children": true,
-				"icon": "jstree-folder",
-				"state": "closed",
-				"text": path.basename(child_path)
-			};
-
-			if (parent_id == root_id) {
-				jstree.parent = '#';
-				jstree.icon = "/tree.png";
-			}
-
-			callback(jstree);
-		});
-	});
-};
-
-var jsonFile = function(parent_path, child_path, callback) { // Return jstree format
-
-	console.log("jsonFile - parent_path - %s", parent_path);
-	console.log("jsonFile - child_path - %s", child_path);
-	
-	getFileId(parent_path, function(parent_id) {
-
-		console.log("jsonFile - parent_id - %d", parent_id);
-
-		acquireFile(child_path, function(child_id) {
-
-			console.log("jsonFile - child_id - %d", child_id);
-
-			var jstree = {
-				"parent": parent_id,
-				"id": child_id,
-				"children": false,
-				"icon": "jstree-file",
-				"state": "disabled",
-				"text": path.basename(child_path),
-				// Custom
-				"mime": mime.lookup(child_path),
-				"file": child_path.substr(www.length) // TODO: this could be done better
-			};
-
-			if (parent_id == root_id) {
-				jstree.parent = '#';
-			}
-
-			callback(jstree);
-		});
-	});
-};
-
-// ##### ##### ##### ##### ##### //
-
-var list_httpCallback = function(request, response) {
+var files_api = function(request, response) {
 
 	try {
 
-		response.writeHead(200, { "Content-Type": "application/json" });
+		response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
 
 		// Used to accumulate list in async
-		var remaining = 0;
-		var list = [];
-		var listAccumulator = function(item) {
-
-			remaining--;
-
-			if (item) {
-				list.push(item);
-			}
-
-			if (remaining <= 0) {
-				response.end(JSON.stringify(list));
-			}
-		};
 
 		var query = url.parse(request.url, true).query;
 
 		console.log("Http Query - " + JSON.stringify(query));
 
-		if ("id" in query) {
+		if ("parent" in query) {
 
-			var parent_id = (query.id == "root") ? root_id : query.id;
+			var parent_id = (query.parent == root_alias) ? root_id : parseInt(query.parent);
 
 			console.log("Parent Id - " + parent_id);
 
 			getFilePath(parent_id, function(parent_path) {
+
+				if (parent_path == null) return;
 
 				console.log("Parent Path - " + parent_path);
 
@@ -224,10 +157,10 @@ var list_httpCallback = function(request, response) {
 					return;
 				}
 
+				var list = [];
 				var children = fs.readdirSync(parent_path);
-
-				remaining = children.length;
-
+				
+				var remaining = children.length;
 				children.forEach(function(child_path) {
 
 					// Prevent escape from root
@@ -235,18 +168,42 @@ var list_httpCallback = function(request, response) {
 					child_path = path.resolve(parent_path, child_path);
 					if (child_path.indexOf(root_path) != 0) return;
 
-					// Choose the appropriate format
+					// Build response
 
-					var stats = fs.statSync(child_path);
-					
-					if (stats.isDirectory()) {
-						jsonDirectory(parent_path, child_path, listAccumulator);
-					}
-					else {
-						jsonFile(parent_path, child_path, listAccumulator);
-					}
+					acquireFile(child_path, function(child_id) {
+
+						remaining--;
+
+						if (child_id == null) return;
+
+						console.log("Child Id - %d", child_id);
+
+						var stats = fs.statSync(child_path);
+						
+						var json = {};
+						json.path		= child_path.substring(www.length);
+						json.name		= path.basename(child_path);
+						json.child		= child_id;
+						json.parent		= (parent_id == root_id) ? root_alias : parent_id;
+						json.type		= "directory";
+
+						if (stats.isDirectory() == false) {
+							json.type = "file";
+							json.size = stats.size; // bytes
+							json.mime = mime.lookup(child_path);
+						}
+
+						list.push(json);
+
+						if (remaining == 0) {
+							response.end(JSON.stringify(list));
+						}
+					});
 				});
 			});
+		}
+		else {
+			response.end("");
 		}
 	}
 	catch (exception) {
@@ -268,7 +225,7 @@ if (port < 0) {
 var app = express();
 var httpServer = http.createServer(app);
 
-app.get("/list", list_httpCallback);
+app.get("/files", files_api);
 app.use(express.static(www));
 
 httpServer.listen(port, function () {

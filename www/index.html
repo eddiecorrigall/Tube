@@ -229,11 +229,39 @@
 					],
 					"core": {
 						"data" : {
-							"url": "/list",
-							"data": function(node) {
+							"url": "/files", // http request
+							"data": function(node) { // http request
 								return {
-									"id": (node.id == "#") ? "root" : node.id
+									"parent": (node.id == "#") ? "root" : node.id
 								};
+							},
+							"dataType": "json", // http response
+							"dataFilter": function(text, type) { // http response
+								
+								var json = JSON.parse(text);
+								var json_out = [];
+								
+								for (var i = 0; i < json.length; i++) {
+
+									var is_root = json[i].parent == "root";
+									var is_directory = json[i].type == "directory";
+
+									json_out.push({
+
+										// jstree properties
+										"id": "" + json[i].child,
+										"parent": is_root ? "#" : json[i].parent,
+										"text": json[i].name,
+										"icon": is_directory ? (is_root ? "/tree.png" : "jstree-folder") : "jstree-file",
+										"children": is_directory,
+
+										// custom properties
+										"path": json[i].path,
+										"mime": json[i].mime
+									});
+								}
+
+								return JSON.stringify(json_out); // dataFiler is a text-in text-out function
 							}
 						}
 					}
@@ -252,13 +280,13 @@
 						
 						var node = data.instance.get_node(data.selected[index]).original;
 
-						if (("file" in node) == false) continue;
+						if (("path" in node) == false) continue;
 						
 						if (VIDEO_MIME_LIST.indexOf(node.mime) >= 0) {
 							
 							videoList.push({
 								"type": node.mime,
-								"src": node.file
+								"src": node.path
 							});
 
 							continue;
