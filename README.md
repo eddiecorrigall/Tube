@@ -5,17 +5,17 @@ Browser based home entertainment center (HEC) running on HTTP.
 ![Tube thumbnail](thumbnail.png)
 
 **Future Plans**
-* File search: when you press enter in the search textbox, add all highlighted to playlist
 * Find out how to support more video and audio file formats!
 * Connect via HTTP to HEC using mobile phone to act as a remote, Examples:
 	* Adjust volume / pause, even when you are not in the same room
 	* Append to playlist
+* File search: when you press enter in the search textbox, add all highlighted to playlist
 
 ## TECHNOLOGIES
 
 **NodeJS**
 
-	Express, Mime
+	Express, Mime, DBLite
 
 **JavaScript**
 
@@ -40,9 +40,9 @@ Browser based home entertainment center (HEC) running on HTTP.
 **NodeJS Plugins**
 
 ```
-> npm install shortid
 > npm install express
 > npm install dblite
+> npm install mime
 ```
 
 ## RUN
@@ -51,7 +51,7 @@ Browser based home entertainment center (HEC) running on HTTP.
 > nodejs tube.js <port>
 ```
 
-**Note:** port is optional and defaults to 8080
+**Note:** *port* is optional and defaults to 8080
 
 ## LOAD
 
