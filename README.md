@@ -5,6 +5,7 @@ Browser based home entertainment center (HEC) running on HTTP.
 ![Tube thumbnail](thumbnail.png)
 
 **Future Plans**
+* Move file browser to top, and have it drop down for when the user wants to select a file
 * Find out how to support more video and audio file formats!
 * Connect via HTTP to HEC using mobile phone to act as a remote, Examples:
 	* Adjust volume / pause, even when you are not in the same room
